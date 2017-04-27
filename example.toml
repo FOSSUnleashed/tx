@@ -1,0 +1,17 @@
+Nick = "mynick"
+NickPassword = "mynickservpassword"
+User = "Username"
+UseTLS = true
+TLSSkipVerify = true
+Server = "irc.slashnet.org:6697"
+ServerPassword = ""
+Admins = ["something!*@*something.com"]
+
+[[Channel]]
+  Name = "#channel"
+  ManageWhiteList = true
+  WhiteListSelfJoin = true
+  WhiteListNicks = ["jo"]
+  WhiteListConnection = []
+  CleanWhiteList = true
+  MinOperatingMode = false
