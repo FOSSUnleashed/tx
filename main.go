@@ -82,6 +82,13 @@ func (cfg *Config) write(filename string) error {
 }
 
 func (cfg *Config) addWhiteList(c *Channel, nick string) error {
+	// check to make sure the nick isn't in the list already
+	for _, v := range c.WhiteListNicks {
+		if v == nick {
+			return nil
+		}
+	}
+
 	c.WhiteListNicks = append(c.WhiteListNicks, nick)
 	return cfg.write(configFile)
 }
@@ -150,6 +157,11 @@ func main() {
 		fmt.Println(err)
 		return
 	}
+
+	var channelOccupancy = make(map[*Channel]map[string]bool)
+	for k, _ := range conf.Channel {
+		channelOccupancy[&conf.Channel[k]] = make(map[string]bool)
+	}
 	// Initialize a ircobj
 	ircobj := irc.IRC(conf.Nick, conf.User)
 	//Set options
@@ -178,6 +190,20 @@ func main() {
 		}
 	})
 
+	var nick_regex = regexp.MustCompile(`[@\+]?([a-zA-Z0-9_\-\\\[\]\{\}\^\` + "`" + `\|]+)\s*$`)
+	ircobj.AddCallback("353", func(e *irc.Event) {
+		channel := conf.findChannel(e.Arguments[2])
+		if channel != nil {
+			users := strings.Split(e.Arguments[3], " ")
+			for _, v := range users {
+				re := nick_regex.FindStringSubmatch(v)
+				if len(re) > 0 {
+					channelOccupancy[channel][re[1]] = true
+				}
+			}
+		}
+	})
+
 	ircobj.AddCallback("366", func(e *irc.Event) {
 		channel := conf.findChannel(e.Arguments[1])
 		if channel != nil {
@@ -191,29 +217,57 @@ func main() {
 
 	ircobj.AddCallback("JOIN", func(e *irc.Event) {
 		channel := conf.findChannel(e.Arguments[0])
-		if channel != nil && channel.ManageWhiteList {
-			if channel.protectedNick(e.Nick) || channel.protectedConn(e.Host) {
-				ircobj.Mode(channel.Name, "+e", e.Nick+"!*@*")
-			} else {
-				ircobj.Noticef(e.Nick,
-					"Hello, please send a private message to <%s> if you would like to participate in the discussion. /msg %s hello",
-					conf.Nick,
-					conf.Nick)
+		if channel != nil {
+			channelOccupancy[channel][e.Nick] = true
+
+			if channel.ManageWhiteList {
+
+				if channel.protectedNick(e.Nick) || channel.protectedConn(e.Host) {
+					ircobj.Mode(channel.Name, "+e", e.Nick+"!*@*")
+				} else {
+					ircobj.Noticef(e.Nick,
+						"Hello, please send a private message to <%s> if you would like to participate in the discussion. /msg %s hello",
+						conf.Nick,
+						conf.Nick)
+				}
+			}
+		}
+	})
+
+	ircobj.AddCallback("KICK", func(e *irc.Event) {
+		nick := e.Arguments[1]
+		channel := conf.findChannel(e.Arguments[0])
+		if channel != nil {
+			delete(channelOccupancy[channel], nick)
+
+			if channel.ManageWhiteList {
+
+				if err := conf.removeWhiteList(channel, nick); err != nil {
+					fmt.Println(err)
+				}
+				ircobj.Mode(channel.Name, "-e", nick+"!*@*")
 			}
 		}
 	})
 
 	ircobj.AddCallback("PART", func(e *irc.Event) {
 		channel := conf.findChannel(e.Arguments[0])
-		if channel != nil && channel.ManageWhiteList && channel.CleanWhiteList {
-			ircobj.Mode(channel.Name, "-e", e.Nick+"!*@*")
+		if channel != nil {
+			delete(channelOccupancy[channel], e.Nick)
+
+			if channel.ManageWhiteList && channel.CleanWhiteList {
+				ircobj.Mode(channel.Name, "-e", e.Nick+"!*@*")
+			}
 		}
 	})
 	ircobj.AddCallback("QUIT", func(e *irc.Event) {
-		for _, v := range conf.Channel {
+		for k, v := range conf.Channel {
+			delete(channelOccupancy[&conf.Channel[k]], e.Nick)
+
 			if v.ManageWhiteList && v.CleanWhiteList {
 				ircobj.Mode(v.Name, "-e", e.Nick+"!*@*")
 			}
+
 		}
 	})
 
@@ -223,9 +277,12 @@ func main() {
 
 		if target == conf.Nick {
 			fmt.Println("DIRECT MESSAGE")
-			for _, v := range conf.Channel {
-				if v.ManageWhiteList && v.WhiteListSelfJoin && !v.protectedNick(e.Nick) {
-					if err := conf.addWhiteList(&v, e.Nick); err != nil {
+			for k, v := range conf.Channel {
+				if v.ManageWhiteList &&
+					v.WhiteListSelfJoin &&
+					!v.protectedNick(e.Nick) &&
+					channelOccupancy[&conf.Channel[k]][e.Nick] {
+					if err := conf.addWhiteList(&conf.Channel[k], e.Nick); err != nil {
 						fmt.Println(err)
 					}
 					ircobj.Mode(v.Name, "+e", e.Nick+"!*@*")
