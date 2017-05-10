@@ -271,6 +271,29 @@ func main() {
 		}
 	})
 
+	ircobj.AddCallback("NICK", func(e *irc.Event) {
+		for k, v := range conf.Channel {
+			if channelOccupancy[&conf.Channel[k]][e.Nick] {
+				delete(channelOccupancy[&conf.Channel[k]], e.Nick)
+				channelOccupancy[&conf.Channel[k]][e.Arguments[0]] = true
+			}
+
+			if v.protectedNick(e.Nick) || v.protectedConn(e.Host) {
+				if err := conf.removeWhiteList(&conf.Channel[k], e.Nick); err != nil {
+					fmt.Println(err)
+				}
+
+				if err := conf.addWhiteList(&conf.Channel[k], e.Arguments[0]); err != nil {
+					fmt.Println(err)
+				}
+				ircobj.Mode(v.Name, "-e+e", e.Nick+"!*@*", e.Arguments[0]+"!*@*")
+
+			} else if v.CleanWhiteList {
+				ircobj.Mode(v.Name, "-e", e.Nick+"!*@*")
+			}
+		}
+	})
+
 	ircobj.AddCallback("PRIVMSG", func(e *irc.Event) {
 		target := e.Arguments[0]
 		message := e.Arguments[1]
