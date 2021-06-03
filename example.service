@@ -1,0 +1,17 @@
+[Unit]
+Description=tx server
+After=network.target
+
+[Service]
+EnvironmentFile=/etc/default/tx
+ExecStart=/path/to/go run /path/to/gocode/src/tx/main.go --debug --config=/path/to/conf.toml
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=process
+Restart=always
+RestartSec=42s
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=tx_irc
+
+[Install]
+WantedBy=multi-user.target
