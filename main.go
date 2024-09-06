@@ -119,20 +119,20 @@ func (cfg *Config) REPL(ircobj *irc.Connection, e *irc.Event, channel *Channel) 
 	message = regexp.MustCompile(`^\s*`+cfg.Nick+`[[:punct:]]*\s+`).ReplaceAllLiteralString(message, "")
 	if cmd := add_cmd.FindStringSubmatch(message); cmd != nil {
 		nick := cmd[1]
-		fmt.Println("Add CMD:", cmd)
+		fmt.Println("Add CMD: ", cmd)
 		if err := cfg.addWhiteList(channel, nick); err != nil {
 			fmt.Println(err)
 		}
 		ircobj.Mode(channel.Name, "+e", nick+"!*@*")
 	} else if cmd := remove_cmd.FindStringSubmatch(message); cmd != nil {
-		fmt.Println("Remove CMD:", cmd)
+		fmt.Println("Remove CMD: ", cmd)
 		nick := cmd[1]
 		if err := cfg.removeWhiteList(channel, nick); err != nil {
 			fmt.Println(err)
 		}
 		ircobj.Mode(channel.Name, "-e", nick+"!*@*")
 	} else {
-		fmt.Println("MESSAGE:", message)
+		fmt.Println("MESSAGE: ", message)
 	}
 }
 
@@ -148,8 +148,7 @@ func main() {
 	flag.Parse()
 
 	if configFile == "" {
-		fmt.Println("A config file is required.")
-		return
+		configFile = "tx.toml"
 	}
 
 	var conf Config
@@ -299,7 +298,7 @@ func main() {
 		message := e.Arguments[1]
 
 		if target == conf.Nick {
-			fmt.Println("DIRECT MESSAGE")
+			fmt.Println("DIRECT MESSAGE: ", message)
 			for k, v := range conf.Channel {
 				if v.ManageWhiteList &&
 					v.WhiteListSelfJoin &&
